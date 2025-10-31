@@ -8,83 +8,91 @@ import {
 import { useState, useRef, useEffect } from "react";
 
 export default function Home() {
-  const [isOpen, setIsOpen] = useState(false);
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+
+  const [isOpen, setIsOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState([]);
-  const [cameraStream, setCameraStream] = useState(null);
 
   const WIDTH = 386;
   const HEIGHT = 583;
 
-  // Inicia câmera traseira
+  // Inicia câmera
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          width: { ideal: WIDTH }, 
-          height: { ideal: HEIGHT },
-          facingMode: { exact: "environment" }
+        video: {
+          width: { min: 320, ideal: WIDTH, max: 640 },
+          height: { min: 240, ideal: HEIGHT, max: 720 },
+          facingMode: "environment" // câmera traseira
         },
         audio: true,
       });
 
-      setCameraStream(stream);
+      cameraStreamRef.current = stream;
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => videoRef.current.play().catch(console.error);
       }
     } catch (err) {
-      console.error("Erro ao acessar a câmera traseira:", err);
-      // Tenta câmera frontal como fallback
+      console.warn("Falha câmera traseira, tentando frontal:", err);
+      // fallback para câmera frontal
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { 
-            width: { ideal: WIDTH }, 
-            height: { ideal: HEIGHT },
+          video: {
+            width: { min: 320, ideal: WIDTH, max: 640 },
+            height: { min: 240, ideal: HEIGHT, max: 720 },
             facingMode: "user"
           },
           audio: true,
         });
-        
-        setCameraStream(stream);
+
+        cameraStreamRef.current = stream;
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => videoRef.current.play().catch(console.error);
         }
       } catch (fallbackErr) {
-        console.error("Erro ao acessar câmera frontal:", fallbackErr);
+        console.error("Não foi possível acessar a câmera:", fallbackErr);
         alert("Não foi possível acessar a câmera. Verifique as permissões.");
       }
     }
   };
 
+  // Iniciar gravação
   const startRecording = () => {
-    if (!cameraStream) {
-      alert("Câmera não está pronta. Aguarde um momento.");
+    const stream = cameraStreamRef.current;
+    if (!stream) {
+      alert("Câmera não está pronta. Aguarde alguns segundos.");
       return;
     }
 
+    let mimeType = "video/webm;codecs=vp9";
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = "video/webm;codecs=vp8";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "video/webm";
+      }
+    }
+
     try {
-      // Grava diretamente do stream da câmera
-      const mediaRecorder = new MediaRecorder(cameraStream, {
-        mimeType: "video/webm;codecs=vp9",
-        videoBitsPerSecond: 2500000 // 2.5 Mbps para melhor qualidade
-      });
-      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 });
       mediaRecorderRef.current = mediaRecorder;
 
       const chunks = [];
       mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunks.push(e.data);
-        }
+        if (e.data.size > 0) chunks.push(e.data);
       };
 
       mediaRecorder.onstop = () => {
         setRecordedChunks(chunks);
       };
 
-      mediaRecorder.start(100); // Captura dados a cada 100ms
+      mediaRecorder.start(100); // coleta de dados a cada 100ms
       setRecording(true);
     } catch (err) {
       console.error("Erro ao iniciar gravação:", err);
@@ -92,6 +100,7 @@ export default function Home() {
     }
   };
 
+  // Parar gravação
   const stopRecording = () => {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
@@ -99,12 +108,13 @@ export default function Home() {
     }
   };
 
+  // Salvar vídeo
   const saveVideo = () => {
     if (recordedChunks.length === 0) {
       alert("Nenhum vídeo gravado!");
       return;
     }
-    
+
     const blob = new Blob(recordedChunks, { type: "video/webm" });
     const url = URL.createObjectURL(blob);
 
@@ -114,32 +124,31 @@ export default function Home() {
     a.download = `video_${Date.now()}.webm`;
     document.body.appendChild(a);
     a.click();
-    
+
     setTimeout(() => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }, 100);
-    
+
     alert("Vídeo salvo! Verifique a pasta de Downloads.");
     setRecordedChunks([]);
   };
 
+  // Fechar modal e liberar câmera
   const handleClose = () => {
-    if (recording) {
-      stopRecording();
-    }
+    if (recording) stopRecording();
     setIsOpen(false);
-    cameraStream?.getTracks().forEach((track) => track.stop());
-    setCameraStream(null);
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
     setRecordedChunks([]);
   };
 
-  // Libera recursos ao desmontar
+  // Cleanup ao desmontar
   useEffect(() => {
     return () => {
-      cameraStream?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [cameraStream]);
+  }, []);
 
   return (
     <Box p={8} textAlign="center">
@@ -185,7 +194,6 @@ export default function Home() {
             
             <Box p={4}>
               <VStack gap={4}>
-                {/* Vídeo da câmera */}
                 <Box
                   as="video"
                   ref={videoRef}
@@ -200,32 +208,17 @@ export default function Home() {
                 />
 
                 {!recording ? (
-                  <Button 
-                    colorScheme="green" 
-                    onClick={startRecording} 
-                    w="full"
-                    size="lg"
-                  >
+                  <Button colorScheme="green" onClick={startRecording} w="full" size="lg">
                     ▶️ Iniciar Gravação
                   </Button>
                 ) : (
-                  <Button 
-                    colorScheme="red" 
-                    onClick={stopRecording} 
-                    w="full"
-                    size="lg"
-                  >
+                  <Button colorScheme="red" onClick={stopRecording} w="full" size="lg">
                     ⏹️ Parar Gravação
                   </Button>
                 )}
 
                 {recordedChunks.length > 0 && (
-                  <Button 
-                    colorScheme="blue" 
-                    onClick={saveVideo} 
-                    w="full"
-                    size="lg"
-                  >
+                  <Button colorScheme="blue" onClick={saveVideo} w="full" size="lg">
                     💾 Salvar Vídeo
                   </Button>
                 )}
