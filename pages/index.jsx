@@ -95,8 +95,7 @@ export default function Home() {
     }
 
     // Aumenta o bitrate para 6.0 Mbps (melhor qualidade para HD/Full HD)
-    const videoBitsPerSecond = 2500000; // 2.5 Mbps
-
+    const videoBitsPerSecond = 6000000;
 
     try {
       const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond });
