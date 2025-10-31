@@ -202,12 +202,6 @@ export default function Home() {
             boxShadow="2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <Flex justify="space-between" align="center" borderBottom="1px" borderColor="gray.200">
-              <Text fontSize="lg" fontWeight="bold">
-                {recording ? "🔴 Gravando..." : "Gravar Vídeo"}
-              </Text>
-              <Button size="sm" variant="ghost" onClick={handleClose}>✕</Button>
-            </Flex>
             
             <Box p={4} flexGrow={1} overflowY="auto">
               <VStack gap={4}>
