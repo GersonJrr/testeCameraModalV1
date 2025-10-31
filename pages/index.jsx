@@ -11,23 +11,20 @@ export default function Home() {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const cameraStreamRef = useRef(null);
+  const canvasRef = useRef(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState([]);
 
-  const WIDTH = 386;
+  const WIDTH = 386; // desktop
   const HEIGHT = 583;
 
   // Inicia câmera
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { min: 320, ideal: WIDTH, max: 640 },
-          height: { min: 240, ideal: HEIGHT, max: 720 },
-          facingMode: "environment" // câmera traseira
-        },
+        video: { facingMode: "environment" },
         audio: true,
       });
 
@@ -39,14 +36,9 @@ export default function Home() {
       }
     } catch (err) {
       console.warn("Falha câmera traseira, tentando frontal:", err);
-      // fallback para câmera frontal
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { min: 320, ideal: WIDTH, max: 640 },
-            height: { min: 240, ideal: HEIGHT, max: 720 },
-            facingMode: "user"
-          },
+          video: { facingMode: "user" },
           audio: true,
         });
 
@@ -63,41 +55,75 @@ export default function Home() {
     }
   };
 
-  // Iniciar gravação
+  // Iniciar gravação usando canvas
   const startRecording = () => {
+    const video = videoRef.current;
     const stream = cameraStreamRef.current;
-    if (!stream) {
+    if (!video || !stream) {
       alert("Câmera não está pronta. Aguarde alguns segundos.");
       return;
     }
 
-    let mimeType = "video/webm;codecs=vp9";
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = "video/webm;codecs=vp8";
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = "video/webm";
+    // Criar canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+    const ctx = canvas.getContext("2d");
+    canvasRef.current = canvas;
+
+    // Capturar stream do canvas
+    const canvasStream = canvas.captureStream(30); // 30 fps
+
+    // Adicionar áudio original da câmera
+    const audioTracks = stream.getAudioTracks();
+    audioTracks.forEach(track => canvasStream.addTrack(track));
+
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+      ? "video/webm;codecs=vp8"
+      : "video/webm";
+
+    const mediaRecorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 2500000 });
+    mediaRecorderRef.current = mediaRecorder;
+
+    const chunks = [];
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => setRecordedChunks(chunks);
+
+    mediaRecorder.start(100);
+    setRecording(true);
+
+    // Desenhar vídeo no canvas em loop
+    const draw = () => {
+      if (!recording) return;
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+      // Ajuste para preencher o canvas (corte proporcional)
+      const videoRatio = video.videoWidth / video.videoHeight;
+      const canvasRatio = WIDTH / HEIGHT;
+
+      let drawWidth = WIDTH;
+      let drawHeight = HEIGHT;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (videoRatio > canvasRatio) {
+        drawWidth = video.videoHeight * canvasRatio;
+        offsetX = (video.videoWidth - drawWidth) / 2;
+      } else {
+        drawHeight = video.videoWidth / canvasRatio;
+        offsetY = (video.videoHeight - drawHeight) / 2;
       }
-    }
 
-    try {
-      const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 });
-      mediaRecorderRef.current = mediaRecorder;
-
-      const chunks = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        setRecordedChunks(chunks);
-      };
-
-      mediaRecorder.start(100); // coleta de dados a cada 100ms
-      setRecording(true);
-    } catch (err) {
-      console.error("Erro ao iniciar gravação:", err);
-      alert("Erro ao iniciar gravação: " + err.message);
-    }
+      ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight, 0, 0, WIDTH, HEIGHT);
+      requestAnimationFrame(draw);
+    };
+    draw();
   };
 
   // Parar gravação
@@ -138,7 +164,7 @@ export default function Home() {
   const handleClose = () => {
     if (recording) stopRecording();
     setIsOpen(false);
-    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current?.getTracks().forEach(track => track.stop());
     cameraStreamRef.current = null;
     setRecordedChunks([]);
   };
@@ -146,7 +172,7 @@ export default function Home() {
   // Cleanup ao desmontar
   useEffect(() => {
     return () => {
-      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current?.getTracks().forEach(track => track.stop());
     };
   }, []);
 
@@ -178,7 +204,8 @@ export default function Home() {
           onClick={handleClose}
         >
           <Box
-            w={`${WIDTH}px`}
+            maxW="90vw"
+            maxH="90vh"
             bg="white"
             borderRadius="xl"
             overflow="hidden"
@@ -200,11 +227,10 @@ export default function Home() {
                   autoPlay
                   playsInline
                   muted
-                  w="100%"
-                  h="444px"
+                  maxW="100%"
+                  maxH="60vh"
                   bg="black"
                   borderRadius="md"
-                  style={{ objectFit: 'cover' }}
                 />
 
                 {!recording ? (
@@ -224,7 +250,7 @@ export default function Home() {
                 )}
 
                 <Text fontSize="xs" color="gray.500">
-                  Resolução: {WIDTH}×{HEIGHT}px | Câmera traseira
+                  Resolução forçada: 386x583 (9:16)
                 </Text>
               </VStack>
             </Box>
