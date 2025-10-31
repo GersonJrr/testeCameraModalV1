@@ -16,16 +16,11 @@ export default function Home() {
   const [recording, setRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState([]);
 
-  const WIDTH = 386;
-  const HEIGHT = 583;
-
   // Inicia câmera
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { min: 320, ideal: WIDTH, max: 640 },
-          height: { min: 240, ideal: HEIGHT, max: 720 },
           facingMode: "environment" // câmera traseira
         },
         audio: true,
@@ -43,8 +38,6 @@ export default function Home() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { min: 320, ideal: WIDTH, max: 640 },
-            height: { min: 240, ideal: HEIGHT, max: 720 },
             facingMode: "user"
           },
           audio: true,
@@ -92,7 +85,7 @@ export default function Home() {
         setRecordedChunks(chunks);
       };
 
-      mediaRecorder.start(100); // coleta de dados a cada 100ms
+      mediaRecorder.start(100);
       setRecording(true);
     } catch (err) {
       console.error("Erro ao iniciar gravação:", err);
@@ -178,7 +171,8 @@ export default function Home() {
           onClick={handleClose}
         >
           <Box
-            w={`${WIDTH}px`}
+            maxW="90vw"
+            maxH="90vh"
             bg="white"
             borderRadius="xl"
             overflow="hidden"
@@ -200,11 +194,10 @@ export default function Home() {
                   autoPlay
                   playsInline
                   muted
-                  w="100%"
-                  h="444px"
+                  maxW="100%"
+                  maxH="60vh"
                   bg="black"
                   borderRadius="md"
-                  style={{ objectFit: 'cover' }}
                 />
 
                 {!recording ? (
@@ -224,7 +217,7 @@ export default function Home() {
                 )}
 
                 <Text fontSize="xs" color="gray.500">
-                  Resolução: {WIDTH}×{HEIGHT}px | Câmera traseira
+                  Resolução nativa da câmera
                 </Text>
               </VStack>
             </Box>
