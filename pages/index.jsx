@@ -7,11 +7,6 @@ import {
 } from "@chakra-ui/react";
 import { useState, useRef, useEffect } from "react";
 
-// Dimensões fixas desejadas
-const CAMERA_WIDTH = 386;
-const CAMERA_HEIGHT = 583;
-const CAMERA_ASPECT_RATIO = CAMERA_WIDTH / CAMERA_HEIGHT; // ~0.662 (386/583)
-
 export default function Home() {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -23,12 +18,8 @@ export default function Home() {
 
   // Inicia câmera
   const startCamera = async () => {
-    // Restrições de captura com as dimensões fixas
-    const videoConstraints = {
-      aspectRatio: { ideal: CAMERA_ASPECT_RATIO },
-      width: { ideal: CAMERA_WIDTH },
-      height: { ideal: CAMERA_HEIGHT }
-    };
+    // Definindo a proporção ideal de 9:16 (0.5625)
+    const aspectRatio9x16 = 9 / 16; 
 
     try {
       // 1. Tenta a câmera traseira ('environment')
@@ -36,11 +27,14 @@ export default function Home() {
         audio: true,
         video: { 
           facingMode: "environment",
-          ...videoConstraints
+          // Removendo width e height para maior compatibilidade. 
+          // O navegador tentará honrar o aspectRatio ideal.
+          aspectRatio: { ideal: aspectRatio9x16 }, 
         },
       });
 
       cameraStreamRef.current = stream;
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => videoRef.current.play().catch(console.error);
@@ -53,11 +47,12 @@ export default function Home() {
           audio: true,
           video: { 
             facingMode: "user",
-            ...videoConstraints
+            aspectRatio: { ideal: aspectRatio9x16 },
           },
         });
 
         cameraStreamRef.current = stream;
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => videoRef.current.play().catch(console.error);
@@ -77,12 +72,14 @@ export default function Home() {
       return;
     }
 
+    // Tenta codecs mais eficientes primeiro
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9"
       : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
       ? "video/webm;codecs=vp8"
       : "video/webm";
 
+    // Aumentei o bitrate para melhor qualidade (2.5 Mbps)
     const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 });
     mediaRecorderRef.current = mediaRecorder;
 
@@ -102,6 +99,7 @@ export default function Home() {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
       setRecording(false);
+      // Remove o setTimeout desnecessário
     }
   };
 
@@ -172,26 +170,22 @@ export default function Home() {
           alignItems="center"
           justifyContent="center"
           zIndex="9999"
+          // Mudar o click para fechar apenas com o botão "✕" para evitar fechamentos acidentais
+          // onClick={handleClose} 
         >
-          {/* Contêiner principal da câmera/modal */}
           <Box
             w="100vw"
             h="100vh"
+            bg="white"
             overflow="hidden"
             onClick={(e) => e.stopPropagation()}
-            bg="black" // Fundo do modal preto para centralizar o vídeo
           >
-            {/* Contêiner do Vídeo e Overlays (Centralizado) */}
             <Box 
-              position="absolute" 
-              top="50%" 
-              left="50%" 
-              transform="translate(-50%, -50%)"
-              w={`${CAMERA_WIDTH}px`} // Largura Fixa
-              h={`${CAMERA_HEIGHT}px`} // Altura Fixa
+              position="relative" 
+              h="100vh" 
+              display="flex" 
+              flexDirection="column"
               bg="black"
-              overflow="hidden" // Garante que o vídeo não saia do frame
-              borderRadius="lg" // Opcional: bordas arredondadas
             >
               {/* Vídeo da câmera */}
               <Box
@@ -199,14 +193,34 @@ export default function Home() {
                 ref={videoRef}
                 autoPlay
                 playsInline
+                // É crucial que `muted` esteja presente para auto-play funcionar em mobile
                 muted
-                // Ocupa 100% do novo contêiner de 386x583
-                w="100%"
-                h="100%"
+                position="absolute"
+                top="0"
+                left="0"
+                w="100vw"
+                h="100vh"
+                bg="black"
+                // ESSA É A PARTE MAIS IMPORTANTE PARA TELA CHEIA:
                 sx={{ 
-                  objectFit: 'cover',
+                  objectFit: 'cover', // Garante que o vídeo preencha 100vw x 100vh cortando as bordas, mantendo a proporção
                   objectPosition: 'center'
                 }}
+              />
+
+              {/* Frame guia 9:16 (Responsivo) */}
+              <Box
+                position="absolute"
+                top="50%"
+                left="50%"
+                // Garante que o guia ocupe uma porção visível do viewport (ex: 80% da altura)
+                height="80vh" 
+                // Calcula a largura para manter a proporção 9:16 (altura * 9/16)
+                width={`calc(80vh * 9 / 16)`} 
+                transform="translate(-50%, -50%)"
+                border="2px dashed white"
+                pointerEvents="none"
+                zIndex="10"
               />
 
               {/* Overlay superior */}
@@ -217,14 +231,14 @@ export default function Home() {
                 right="0" 
                 justify="space-between" 
                 align="center" 
-                p={2} // Padding ajustado para o frame menor
+                p={4} 
                 bg="blackAlpha.600"
-                zIndex="10"
+                zIndex="20"
               >
-                <Text fontSize="md" fontWeight="bold" color="white">
+                <Text fontSize="lg" fontWeight="bold" color="white">
                   {recording ? "🔴 Gravando..." : "Gravar Vídeo"}
                 </Text>
-                <Button size="xs" variant="ghost" onClick={handleClose} color="white">✕</Button>
+                <Button size="sm" variant="ghost" onClick={handleClose} color="white">✕</Button>
               </Flex>
 
               {/* Botões inferiores */}
@@ -233,29 +247,30 @@ export default function Home() {
                 bottom="0" 
                 left="0" 
                 right="0" 
-                gap={2} // Gap ajustado
-                p={2} 
+                gap={3} 
+                p={4} 
                 bg="blackAlpha.600"
-                zIndex="10"
+                zIndex="20"
               >
                 {!recording ? (
                   <Button 
                     colorScheme="green" 
                     onClick={startRecording} 
                     w="full" 
-                    size="md" // Tamanho ajustado
+                    size="lg"
+                    // Desabilita se a câmera ainda não tiver sido carregada
                     isDisabled={!cameraStreamRef.current}
                   >
                     ▶️ Iniciar Gravação
                   </Button>
                 ) : (
-                  <Button colorScheme="red" onClick={stopRecording} w="full" size="md">
+                  <Button colorScheme="red" onClick={stopRecording} w="full" size="lg">
                     ⏹️ Parar Gravação
                   </Button>
                 )}
 
                 {recordedChunks.length > 0 && (
-                  <Button colorScheme="blue" onClick={saveVideo} w="full" size="md">
+                  <Button colorScheme="blue" onClick={saveVideo} w="full" size="lg">
                     💾 Salvar Vídeo
                   </Button>
                 )}
