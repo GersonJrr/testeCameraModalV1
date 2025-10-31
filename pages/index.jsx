@@ -166,7 +166,7 @@ export default function Home() {
   }, []);
 
   return (
-    <Box p={8} textAlign="center">
+    <Box textAlign="center">
       <Button
         colorScheme="blue"
         size="lg"
@@ -202,7 +202,7 @@ export default function Home() {
             boxShadow="2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <Flex justify="space-between" align="center" p={4} borderBottom="1px" borderColor="gray.200">
+            <Flex justify="space-between" align="center" borderBottom="1px" borderColor="gray.200">
               <Text fontSize="lg" fontWeight="bold">
                 {recording ? "🔴 Gravando..." : "Gravar Vídeo"}
               </Text>
