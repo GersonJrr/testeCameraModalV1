@@ -22,6 +22,7 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: "environment",
+          aspectRatio: { ideal: 0.5625 }, // 9:16
           width: { ideal: 1080 },
           height: { ideal: 1920 }
         },
@@ -40,6 +41,7 @@ export default function Home() {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: "user",
+            aspectRatio: { ideal: 0.5625 }, // 9:16
             width: { ideal: 1080 },
             height: { ideal: 1920 }
           },
@@ -190,10 +192,13 @@ export default function Home() {
                 position="absolute"
                 top="0"
                 left="0"
-                w="100%"
-                h="100%"
+                w="100vw"
+                h="100vh"
                 bg="black"
-                sx={{ objectFit: 'cover' }}
+                sx={{ 
+                  objectFit: 'cover',
+                  objectPosition: 'center'
+                }}
               />
               
               <Flex 
