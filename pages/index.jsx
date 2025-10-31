@@ -15,8 +15,8 @@ export default function Home() {
   const [recordedChunks, setRecordedChunks] = useState([]);
   const [cameraStream, setCameraStream] = useState(null);
 
-  const WIDTH = 386;
-  const HEIGHT = 583;
+  const WIDTH = 1080;
+  const HEIGHT = 1920;
 
   // Inicia câmera traseira
   const startCamera = async () => {
@@ -68,7 +68,7 @@ export default function Home() {
       // Grava diretamente do stream da câmera
       const mediaRecorder = new MediaRecorder(cameraStream, {
         mimeType: "video/webm;codecs=vp9",
-        videoBitsPerSecond: 2500000 // 2.5 Mbps para melhor qualidade
+        videoBitsPerSecond: 8000000 // 8 Mbps para qualidade Full HD
       });
       
       mediaRecorderRef.current = mediaRecorder;
@@ -169,7 +169,8 @@ export default function Home() {
           onClick={handleClose}
         >
           <Box
-            w={`${WIDTH}px`}
+            maxW="600px"
+            w="90%"
             bg="white"
             borderRadius="xl"
             overflow="hidden"
@@ -193,7 +194,9 @@ export default function Home() {
                   playsInline
                   muted
                   w="100%"
-                  h="444px"
+                  maxW="600px"
+                  h="auto"
+                  aspectRatio="9/16"
                   bg="black"
                   borderRadius="md"
                   style={{ objectFit: 'cover' }}
@@ -231,7 +234,7 @@ export default function Home() {
                 )}
 
                 <Text fontSize="xs" color="gray.500">
-                  Resolução: {WIDTH}×{HEIGHT}px | Câmera traseira
+                  Resolução: {WIDTH}×{HEIGHT}px (9:16) | Câmera traseira
                 </Text>
               </VStack>
             </Box>
