@@ -195,7 +195,7 @@ export default function Home() {
                   playsInline
                   muted
                   maxW="100%"
-                  maxH="60vh"
+                  maxH="80vh"
                   bg="black"
                   borderRadius="md"
                 />
