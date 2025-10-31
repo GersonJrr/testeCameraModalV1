@@ -11,26 +11,21 @@ export default function Home() {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const cameraStreamRef = useRef(null);
+  const canvasRef = useRef(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState([]);
 
+  const WIDTH = 386; // desktop
+  const HEIGHT = 583;
+
   // Inicia câmera
   const startCamera = async () => {
-    // Definindo a proporção ideal de 9:16 (0.5625)
-    const aspectRatio9x16 = 9 / 16; 
-
     try {
-      // 1. Tenta a câmera traseira ('environment')
       const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
         audio: true,
-        video: { 
-          facingMode: "environment",
-          // Removendo width e height para maior compatibilidade. 
-          // O navegador tentará honrar o aspectRatio ideal.
-          aspectRatio: { ideal: aspectRatio9x16 }, 
-        },
       });
 
       cameraStreamRef.current = stream;
@@ -42,13 +37,9 @@ export default function Home() {
     } catch (err) {
       console.warn("Falha câmera traseira, tentando frontal:", err);
       try {
-        // 2. Tenta a câmera frontal ('user') como fallback
         const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" },
           audio: true,
-          video: { 
-            facingMode: "user",
-            aspectRatio: { ideal: aspectRatio9x16 },
-          },
         });
 
         cameraStreamRef.current = stream;
@@ -64,23 +55,36 @@ export default function Home() {
     }
   };
 
-  // Iniciar gravação diretamente do stream da câmera
+  // Iniciar gravação usando canvas
   const startRecording = () => {
+    const video = videoRef.current;
     const stream = cameraStreamRef.current;
-    if (!stream) {
+    if (!video || !stream) {
       alert("Câmera não está pronta. Aguarde alguns segundos.");
       return;
     }
 
-    // Tenta codecs mais eficientes primeiro
+    // Criar canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+    const ctx = canvas.getContext("2d");
+    canvasRef.current = canvas;
+
+    // Capturar stream do canvas
+    const canvasStream = canvas.captureStream(30); // 30 fps
+
+    // Adicionar áudio original da câmera
+    const audioTracks = stream.getAudioTracks();
+    audioTracks.forEach(track => canvasStream.addTrack(track));
+
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9"
       : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
       ? "video/webm;codecs=vp8"
       : "video/webm";
 
-    // Aumentei o bitrate para melhor qualidade (2.5 Mbps)
-    const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 });
+    const mediaRecorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 2500000 });
     mediaRecorderRef.current = mediaRecorder;
 
     const chunks = [];
@@ -92,6 +96,34 @@ export default function Home() {
 
     mediaRecorder.start(100);
     setRecording(true);
+
+    // Desenhar vídeo no canvas em loop
+    const draw = () => {
+      if (!recording) return;
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+      // Ajuste para preencher o canvas (corte proporcional)
+      const videoRatio = video.videoWidth / video.videoHeight;
+      const canvasRatio = WIDTH / HEIGHT;
+
+      let drawWidth = WIDTH;
+      let drawHeight = HEIGHT;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (videoRatio > canvasRatio) {
+        drawWidth = video.videoHeight * canvasRatio;
+        offsetX = (video.videoWidth - drawWidth) / 2;
+      } else {
+        drawHeight = video.videoWidth / canvasRatio;
+        offsetY = (video.videoHeight - drawHeight) / 2;
+      }
+
+      ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight, 0, 0, WIDTH, HEIGHT);
+      requestAnimationFrame(draw);
+    };
+    draw();
   };
 
   // Parar gravação
@@ -99,7 +131,6 @@ export default function Home() {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
       setRecording(false);
-      // Remove o setTimeout desnecessário
     }
   };
 
@@ -170,98 +201,40 @@ export default function Home() {
           alignItems="center"
           justifyContent="center"
           zIndex="9999"
-          // Mudar o click para fechar apenas com o botão "✕" para evitar fechamentos acidentais
-          // onClick={handleClose} 
+          onClick={handleClose}
         >
           <Box
-            w="100vw"
-            h="100vh"
+            maxW="90vw"
+            maxH="90vh"
             bg="white"
+            borderRadius="xl"
             overflow="hidden"
+            boxShadow="2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <Box 
-              position="relative" 
-              h="100vh" 
-              display="flex" 
-              flexDirection="column"
-              bg="black"
-            >
-              {/* Vídeo da câmera */}
-              <Box
-  as="video"
-  ref={videoRef}
-  autoPlay
-  playsInline
-  muted
-  position="absolute"
-  top="0"
-  left="0"
-  w="100vw"
-  h="100vh"
-  bg="black"
-  sx={{ 
-    objectFit: 'cover',
-    objectPosition: 'center',
-    transform: 'rotate(90deg)',
-    transformOrigin: 'center center',
-  }}
-/>
+            <Flex justify="space-between" align="center" p={4} borderBottom="1px" borderColor="gray.200">
+              <Text fontSize="lg" fontWeight="bold">
+                {recording ? "🔴 Gravando..." : "Gravar Vídeo"}
+              </Text>
+              <Button size="sm" variant="ghost" onClick={handleClose}>✕</Button>
+            </Flex>
+            
+            <Box p={4}>
+              <VStack gap={4}>
+                <Box
+                  as="video"
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  maxW="100%"
+                  maxH="60vh"
+                  bg="black"
+                  borderRadius="md"
+                />
 
-
-              {/* Frame guia 9:16 (Responsivo) */}
-              <Box
-                position="absolute"
-                top="50%"
-                left="50%"
-                // Garante que o guia ocupe uma porção visível do viewport (ex: 80% da altura)
-                height="80vh" 
-                // Calcula a largura para manter a proporção 9:16 (altura * 9/16)
-                width={`calc(80vh * 9 / 16)`} 
-                transform="translate(-50%, -50%)"
-                border="2px dashed white"
-                pointerEvents="none"
-                zIndex="10"
-              />
-
-              {/* Overlay superior */}
-              <Flex 
-                position="absolute" 
-                top="0" 
-                left="0" 
-                right="0" 
-                justify="space-between" 
-                align="center" 
-                p={4} 
-                bg="blackAlpha.600"
-                zIndex="20"
-              >
-                <Text fontSize="lg" fontWeight="bold" color="white">
-                  {recording ? "🔴 Gravando..." : "Gravar Vídeo"}
-                </Text>
-                <Button size="sm" variant="ghost" onClick={handleClose} color="white">✕</Button>
-              </Flex>
-
-              {/* Botões inferiores */}
-              <VStack 
-                position="absolute" 
-                bottom="0" 
-                left="0" 
-                right="0" 
-                gap={3} 
-                p={4} 
-                bg="blackAlpha.600"
-                zIndex="20"
-              >
                 {!recording ? (
-                  <Button 
-                    colorScheme="green" 
-                    onClick={startRecording} 
-                    w="full" 
-                    size="lg"
-                    // Desabilita se a câmera ainda não tiver sido carregada
-                    isDisabled={!cameraStreamRef.current}
-                  >
+                  <Button colorScheme="green" onClick={startRecording} w="full" size="lg">
                     ▶️ Iniciar Gravação
                   </Button>
                 ) : (
@@ -275,6 +248,10 @@ export default function Home() {
                     💾 Salvar Vídeo
                   </Button>
                 )}
+
+                <Text fontSize="xs" color="gray.500">
+                  Resolução forçada: 386x583 (9:16)
+                </Text>
               </VStack>
             </Box>
           </Box>
