@@ -17,7 +17,6 @@ export default function Home() {
   const [isOpen, setIsOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState([]);
-  const [mediaBlobUrl, setMediaBlobUrl] = useState(null);
 
   // Inicia câmera (traseira ou frontal)
   const startCamera = async () => {
@@ -85,15 +84,12 @@ export default function Home() {
 
     mediaRecorder.onstop = () => {
       setRecordedChunks(chunks);
-      const blob = new Blob(chunks, { type: "video/webm" });
-      const url = URL.createObjectURL(blob);
-      setMediaBlobUrl(url);
     };
 
     mediaRecorder.start(100);
     setRecording(true);
 
-    // Função para desenhar vídeo no canvas frame a frame
+    // Função para desenhar vídeo no canvas frame a frame sem zoom
     const draw = () => {
       const ctx = canvas.getContext("2d");
       const cw = canvas.width;
@@ -104,7 +100,8 @@ export default function Home() {
       const vw = video.videoWidth;
       const vh = video.videoHeight;
 
-      const scale = Math.max(cw / vw, ch / vh);
+      // Ajusta para caber todo o vídeo dentro do canvas sem cortar
+      const scale = Math.min(cw / vw, ch / vh);
       const w = vw * scale;
       const h = vh * scale;
       const x = (cw - w) / 2;
@@ -150,7 +147,6 @@ export default function Home() {
 
     alert("Vídeo salvo! Verifique a pasta de Downloads.");
     setRecordedChunks([]);
-    setMediaBlobUrl(null);
   };
 
   // Fechar modal e liberar câmera
@@ -160,7 +156,6 @@ export default function Home() {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
     cameraStreamRef.current = null;
     setRecordedChunks([]);
-    setMediaBlobUrl(null);
   };
 
   useEffect(() => {
@@ -282,21 +277,18 @@ export default function Home() {
                 </Button>
               )}
 
-              {mediaBlobUrl && (
-                <>
-                  <video src={mediaBlobUrl} controls style={{ width: "200px" }} />
-                  <Button 
-                    colorScheme="green" 
-                    onClick={saveVideo} 
-                    w="full" 
-                    size="lg"
-                    fontSize="xl"
-                    h="60px"
-                    borderRadius="full"
-                  >
-                    💾 Salvar Vídeo
-                  </Button>
-                </>
+              {recordedChunks.length > 0 && (
+                <Button 
+                  colorScheme="green" 
+                  onClick={saveVideo} 
+                  w="full" 
+                  size="lg"
+                  fontSize="xl"
+                  h="60px"
+                  borderRadius="full"
+                >
+                  💾 Salvar Víde
+                </Button>
               )}
 
               <Text fontSize="sm" color="whiteAlpha.700">
