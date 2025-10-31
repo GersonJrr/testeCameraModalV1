@@ -168,12 +168,10 @@ export default function Home() {
           onClick={handleClose}
         >
           <Box
-            maxW="90vw"
-            maxH="90vh"
+            w="100vw"
+            h="100vh"
             bg="white"
-            borderRadius="xl"
             overflow="hidden"
-            boxShadow="2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <Flex justify="space-between" align="center" p={4} borderBottom="1px" borderColor="gray.200">
@@ -183,8 +181,8 @@ export default function Home() {
               <Button size="sm" variant="ghost" onClick={handleClose}>✕</Button>
             </Flex>
             
-            <Box p={4}>
-              <VStack gap={4}>
+            <Box p={4} h="calc(100vh - 64px)" display="flex" flexDirection="column">
+              <VStack gap={4} flex="1" justify="space-between">
                 <Box
                   as="video"
                   ref={videoRef}
@@ -192,24 +190,23 @@ export default function Home() {
                   playsInline
                   muted
                   w="100%"
-                  maxH="70vh"
+                  h="100%"
                   bg="black"
-                  borderRadius="md"
-                  sx={{ aspectRatio: '9/16' }}
+                  sx={{ objectFit: 'cover' }}
                 />
 
                 {!recording ? (
-                  <Button colorScheme="green" onClick={startRecording} w="full" size="lg">
+                  <Button colorScheme="green" onClick={startRecording} w="full" size="lg" flexShrink={0}>
                     ▶️ Iniciar Gravação
                   </Button>
                 ) : (
-                  <Button colorScheme="red" onClick={stopRecording} w="full" size="lg">
+                  <Button colorScheme="red" onClick={stopRecording} w="full" size="lg" flexShrink={0}>
                     ⏹️ Parar Gravação
                   </Button>
                 )}
 
                 {recordedChunks.length > 0 && (
-                  <Button colorScheme="blue" onClick={saveVideo} w="full" size="lg">
+                  <Button colorScheme="blue" onClick={saveVideo} w="full" size="lg" flexShrink={0}>
                     💾 Salvar Vídeo
                   </Button>
                 )}
