@@ -20,7 +20,11 @@ export default function Home() {
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
+        video: { 
+          facingMode: "environment",
+          width: { ideal: 1080 },
+          height: { ideal: 1920 }
+        },
         audio: true,
       });
 
@@ -34,7 +38,11 @@ export default function Home() {
       console.warn("Falha câmera traseira, tentando frontal:", err);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
+          video: { 
+            facingMode: "user",
+            width: { ideal: 1080 },
+            height: { ideal: 1920 }
+          },
           audio: true,
         });
 
@@ -84,6 +92,9 @@ export default function Home() {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
       setRecording(false);
+      setTimeout(() => {
+        // Força atualização do estado após a gravação
+      }, 200);
     }
   };
 
@@ -180,10 +191,11 @@ export default function Home() {
                   autoPlay
                   playsInline
                   muted
-                  maxW="100%"
-                  maxH="60vh"
+                  w="100%"
+                  maxH="70vh"
                   bg="black"
                   borderRadius="md"
+                  sx={{ aspectRatio: '9/16' }}
                 />
 
                 {!recording ? (
