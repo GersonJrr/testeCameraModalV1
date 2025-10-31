@@ -12,6 +12,7 @@ export default function Home() {
   const mediaRecorderRef = useRef(null);
   const cameraStreamRef = useRef(null);
   const canvasRef = useRef(null);
+  const recordedChunksRef = useRef([]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -64,19 +65,14 @@ export default function Home() {
       return;
     }
 
-    // Criar canvas
     const canvas = document.createElement("canvas");
     canvas.width = WIDTH;
     canvas.height = HEIGHT;
     const ctx = canvas.getContext("2d");
     canvasRef.current = canvas;
 
-    // Capturar stream do canvas
     const canvasStream = canvas.captureStream(30); // 30 fps
-
-    // Adicionar áudio original da câmera
-    const audioTracks = stream.getAudioTracks();
-    audioTracks.forEach(track => canvasStream.addTrack(track));
+    stream.getAudioTracks().forEach(track => canvasStream.addTrack(track));
 
     const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
       ? "video/webm;codecs=vp9"
@@ -87,23 +83,23 @@ export default function Home() {
     const mediaRecorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 2500000 });
     mediaRecorderRef.current = mediaRecorder;
 
-    const chunks = [];
+    recordedChunksRef.current = []; // reset
     mediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) chunks.push(e.data);
+      if (e.data.size > 0) recordedChunksRef.current.push(e.data);
     };
 
-    mediaRecorder.onstop = () => setRecordedChunks(chunks);
+    mediaRecorder.onstop = () => {
+      setRecordedChunks(recordedChunksRef.current); // atualiza estado para mostrar botão
+    };
 
     mediaRecorder.start(100);
     setRecording(true);
 
-    // Desenhar vídeo no canvas em loop
     const draw = () => {
       if (!recording) return;
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // Ajuste para preencher o canvas (corte proporcional)
       const videoRatio = video.videoWidth / video.videoHeight;
       const canvasRatio = WIDTH / HEIGHT;
 
@@ -169,7 +165,6 @@ export default function Home() {
     setRecordedChunks([]);
   };
 
-  // Cleanup ao desmontar
   useEffect(() => {
     return () => {
       cameraStreamRef.current?.getTracks().forEach(track => track.stop());
