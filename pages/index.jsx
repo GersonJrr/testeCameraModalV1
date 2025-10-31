@@ -1,34 +1,32 @@
 import { 
   Box, 
   Button,
-  DialogRoot,
-  DialogContent,
-  DialogHeader,
-  DialogBody,
-  DialogCloseTrigger,
   VStack,
-  Text
+  Text,
+  Flex
 } from "@chakra-ui/react";
 import { useState, useRef, useEffect } from "react";
 
 export default function Home() {
   const [isOpen, setIsOpen] = useState(false);
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const [recording, setRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState([]);
   const [cameraStream, setCameraStream] = useState(null);
-  const [canvasStream, setCanvasStream] = useState(null);
 
   const WIDTH = 386;
   const HEIGHT = 583;
 
-  // Inicia câmera
+  // Inicia câmera traseira
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: WIDTH }, height: { ideal: HEIGHT } },
+        video: { 
+          width: { ideal: WIDTH }, 
+          height: { ideal: HEIGHT },
+          facingMode: { exact: "environment" }
+        },
         audio: true,
       });
 
@@ -36,58 +34,77 @@ export default function Home() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-
-      // Configura o canvas para capturar o vídeo
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d");
-      canvas.width = WIDTH;
-      canvas.height = HEIGHT;
-
-      // Renderiza os frames da câmera no canvas
-      const drawFrame = () => {
-        if (recording && videoRef.current) {
-          ctx.drawImage(videoRef.current, 0, 0, WIDTH, HEIGHT);
-        }
-        requestAnimationFrame(drawFrame);
-      };
-      drawFrame();
     } catch (err) {
-      console.error("Erro ao acessar a câmera:", err);
-      alert("Não foi possível acessar a câmera. Verifique as permissões.");
+      console.error("Erro ao acessar a câmera traseira:", err);
+      // Tenta câmera frontal como fallback
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            width: { ideal: WIDTH }, 
+            height: { ideal: HEIGHT },
+            facingMode: "user"
+          },
+          audio: true,
+        });
+        
+        setCameraStream(stream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (fallbackErr) {
+        console.error("Erro ao acessar câmera frontal:", fallbackErr);
+        alert("Não foi possível acessar a câmera. Verifique as permissões.");
+      }
     }
   };
 
   const startRecording = () => {
-    if (!canvasRef.current) return;
+    if (!cameraStream) {
+      alert("Câmera não está pronta. Aguarde um momento.");
+      return;
+    }
 
-    const stream = canvasRef.current.captureStream(30); // 30 FPS
-    setCanvasStream(stream);
+    try {
+      // Grava diretamente do stream da câmera
+      const mediaRecorder = new MediaRecorder(cameraStream, {
+        mimeType: "video/webm;codecs=vp9",
+        videoBitsPerSecond: 2500000 // 2.5 Mbps para melhor qualidade
+      });
+      
+      mediaRecorderRef.current = mediaRecorder;
 
-    const mediaRecorder = new MediaRecorder(stream, {
-      mimeType: "video/webm; codecs=vp9",
-    });
-    mediaRecorderRef.current = mediaRecorder;
+      const chunks = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
 
-    const chunks = [];
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
+      mediaRecorder.onstop = () => {
+        setRecordedChunks(chunks);
+      };
 
-    mediaRecorder.onstop = () => {
-      setRecordedChunks(chunks);
-    };
-
-    mediaRecorder.start();
-    setRecording(true);
+      mediaRecorder.start(100); // Captura dados a cada 100ms
+      setRecording(true);
+    } catch (err) {
+      console.error("Erro ao iniciar gravação:", err);
+      alert("Erro ao iniciar gravação: " + err.message);
+    }
   };
 
   const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setRecording(false);
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
   };
 
   const saveVideo = () => {
-    if (recordedChunks.length === 0) return;
+    if (recordedChunks.length === 0) {
+      alert("Nenhum vídeo gravado!");
+      return;
+    }
+    
     const blob = new Blob(recordedChunks, { type: "video/webm" });
     const url = URL.createObjectURL(blob);
 
@@ -97,86 +114,130 @@ export default function Home() {
     a.download = `video_${Date.now()}.webm`;
     document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
-    alert("Vídeo salvo com sucesso!");
+    
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+    
+    alert("Vídeo salvo! Verifique a pasta de Downloads.");
     setRecordedChunks([]);
   };
 
-  // Libera câmera ao fechar
+  const handleClose = () => {
+    if (recording) {
+      stopRecording();
+    }
+    setIsOpen(false);
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+    setRecordedChunks([]);
+  };
+
+  // Libera recursos ao desmontar
   useEffect(() => {
     return () => {
-      cameraStream?.getTracks().forEach((t) => t.stop());
-      canvasStream?.getTracks().forEach((t) => t.stop());
+      cameraStream?.getTracks().forEach((track) => track.stop());
     };
-  }, [cameraStream, canvasStream]);
-
-  const handleClose = () => {
-    setIsOpen(false);
-    cameraStream?.getTracks().forEach((t) => t.stop());
-  };
+  }, [cameraStream]);
 
   return (
     <Box p={8} textAlign="center">
       <Button
         colorScheme="blue"
+        size="lg"
         onClick={() => {
           setIsOpen(true);
           startCamera();
         }}
       >
-        Abrir Câmera
+        📹 Abrir Câmera
       </Button>
 
-      <DialogRoot open={isOpen} onOpenChange={(e) => e.open ? null : handleClose()} size="sm" placement="center">
-        <DialogContent
-          w={`${WIDTH}px`}
-          h={`${HEIGHT}px`}
-          borderRadius="xl"
-          overflow="hidden"
+      {isOpen && (
+        <Box
+          position="fixed"
+          top="0"
+          left="0"
+          right="0"
+          bottom="0"
+          bg="blackAlpha.800"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          zIndex="9999"
+          onClick={handleClose}
         >
-          <DialogHeader textAlign="center">Gravar Vídeo</DialogHeader>
-          <DialogCloseTrigger />
-          <DialogBody p={2}>
-            <VStack spacing={4}>
-              {/* Vídeo da câmera */}
-              <Box
-                as="video"
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                w="100%"
-                h="444px"
-                bg="black"
-                borderRadius="md"
-              />
-
-              {/* Canvas invisível usado para gravação */}
-              <canvas ref={canvasRef} style={{ display: "none" }} />
-
-              {!recording ? (
-                <Button colorScheme="green" onClick={startRecording}>
-                  ▶️ Iniciar Gravação
-                </Button>
-              ) : (
-                <Button colorScheme="red" onClick={stopRecording}>
-                  ⏹️ Parar Gravação
-                </Button>
-              )}
-
-              {recordedChunks.length > 0 && (
-                <Button colorScheme="blue" onClick={saveVideo}>
-                  💾 Salvar Vídeo
-                </Button>
-              )}
-
-              <Text fontSize="xs" color="gray.500">
-                Resolução forçada: {WIDTH}×{HEIGHT}px
+          <Box
+            w={`${WIDTH}px`}
+            bg="white"
+            borderRadius="xl"
+            overflow="hidden"
+            boxShadow="2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Flex justify="space-between" align="center" p={4} borderBottom="1px" borderColor="gray.200">
+              <Text fontSize="lg" fontWeight="bold">
+                {recording ? "🔴 Gravando..." : "Gravar Vídeo"}
               </Text>
-            </VStack>
-          </DialogBody>
-        </DialogContent>
-      </DialogRoot>
+              <Button size="sm" variant="ghost" onClick={handleClose}>✕</Button>
+            </Flex>
+            
+            <Box p={4}>
+              <VStack gap={4}>
+                {/* Vídeo da câmera */}
+                <Box
+                  as="video"
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  w="100%"
+                  h="444px"
+                  bg="black"
+                  borderRadius="md"
+                  style={{ objectFit: 'cover' }}
+                />
+
+                {!recording ? (
+                  <Button 
+                    colorScheme="green" 
+                    onClick={startRecording} 
+                    w="full"
+                    size="lg"
+                  >
+                    ▶️ Iniciar Gravação
+                  </Button>
+                ) : (
+                  <Button 
+                    colorScheme="red" 
+                    onClick={stopRecording} 
+                    w="full"
+                    size="lg"
+                  >
+                    ⏹️ Parar Gravação
+                  </Button>
+                )}
+
+                {recordedChunks.length > 0 && (
+                  <Button 
+                    colorScheme="blue" 
+                    onClick={saveVideo} 
+                    w="full"
+                    size="lg"
+                  >
+                    💾 Salvar Vídeo
+                  </Button>
+                )}
+
+                <Text fontSize="xs" color="gray.500">
+                  Resolução: {WIDTH}×{HEIGHT}px | Câmera traseira
+                </Text>
+              </VStack>
+            </Box>
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }
