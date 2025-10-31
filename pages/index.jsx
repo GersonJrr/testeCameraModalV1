@@ -28,7 +28,6 @@ export default function Home() {
         audio: false
       });
 
-
       cameraStreamRef.current = stream;
 
       if (videoRef.current) {
@@ -197,11 +196,13 @@ export default function Home() {
                   autoPlay
                   playsInline
                   muted
-                  maxW="100%"
-                  maxH="100%"
+                  width="100%"
+                  height="70vh"
+                  objectFit="cover" // mantém o vídeo preenchendo, corta se necessário
                   bg="black"
                   borderRadius="md"
                 />
+
 
                 {!recording ? (
                   <Button colorScheme="green" onClick={startRecording} w="full" size="lg">
