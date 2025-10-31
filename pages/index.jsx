@@ -1,299 +1,311 @@
 import { 
-  Box, 
-  Button,
-  VStack,
-  Text,
-  Flex
+  Box, 
+  Button,
+  VStack,
+  Text,
+  Flex
 } from "@chakra-ui/react";
 import { useState, useRef, useEffect } from "react";
 
 export default function Home() {
-  const videoRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const cameraStreamRef = useRef(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const animationFrameRef = useRef(null);
 
-  const [isOpen, setIsOpen] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recordedChunks, setRecordedChunks] = useState([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordedChunks, setRecordedChunks] = useState([]);
+  const [mediaBlobUrl, setMediaBlobUrl] = useState(null);
 
-  // Inicia câmera em modo portrait
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "environment",
-          aspectRatio: 9/16, // Proporção vertical (shorts)
-          width: { ideal: 1080 },
-          height: { ideal: 1920 }
-        },
-        audio: true,
-      });
+  // Inicia câmera (traseira ou frontal)
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment",
+          width: { ideal: 1080 },
+          height: { ideal: 1920 },
+          aspectRatio: 9/16
+        },
+        audio: true,
+      });
 
-      cameraStreamRef.current = stream;
+      cameraStreamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => videoRef.current.play().catch(console.error);
+      }
+    } catch (err) {
+      console.warn("Falha câmera traseira, tentando frontal:", err);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 1080 },
+            height: { ideal: 1920 },
+            aspectRatio: 9/16
+          },
+          audio: true,
+        });
+        cameraStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => videoRef.current.play().catch(console.error);
+        }
+      } catch (fallbackErr) {
+        console.error("Não foi possível acessar a câmera:", fallbackErr);
+        alert("Não foi possível acessar a câmera. Verifique as permissões.");
+      }
+    }
+  };
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        // Corrigindo possível orientação no display se o stream for horizontal
-        // Em alguns navegadores, a orientação é corrigida automaticamente aqui
-        videoRef.current.onloadedmetadata = () => videoRef.current.play().catch(console.error);
-      }
-    } catch (err) {
-      console.warn("Falha câmera traseira, tentando frontal:", err);
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "user",
-            aspectRatio: 9/16,
-            width: { ideal: 1080 },
-            height: { ideal: 1920 }
-          },
-          audio: true,
-        });
+  // Iniciar gravação usando canvas
+  const startRecording = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || !cameraStreamRef.current) {
+      alert("Câmera não está pronta. Aguarde alguns segundos.");
+      return;
+    }
 
-        cameraStreamRef.current = stream;
+    // Define canvas no tamanho final 1080x1920
+    canvas.width = 1080;
+    canvas.height = 1920;
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => videoRef.current.play().catch(console.error);
-        }
-      } catch (fallbackErr) {
-        console.error("Não foi possível acessar a câmera:", fallbackErr);
-        alert("Não foi possível acessar a câmera. Verifique as permissões.");
-      }
-    }
-  };
+    const canvasStream = canvas.captureStream(30); // 30 FPS
+    const mediaRecorder = new MediaRecorder(canvasStream, { mimeType: "video/webm;codecs=vp9" });
+    mediaRecorderRef.current = mediaRecorder;
 
-  // Iniciar gravação
-  const startRecording = () => {
-    const stream = cameraStreamRef.current;
-    if (!stream) {
-      alert("Câmera não está pronta. Aguarde alguns segundos.");
-      return;
-    }
+    const chunks = [];
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
 
-    let mimeType = "video/webm;codecs=vp9";
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = "video/webm;codecs=vp8";
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = "video/webm";
-      }
-    }
+    mediaRecorder.onstop = () => {
+      setRecordedChunks(chunks);
+      const blob = new Blob(chunks, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      setMediaBlobUrl(url);
+    };
 
-    try {
-      const mediaRecorder = new MediaRecorder(stream, { 
-        mimeType, 
-        videoBitsPerSecond: 2500000 
-      });
-      mediaRecorderRef.current = mediaRecorder;
+    mediaRecorder.start(100);
+    setRecording(true);
 
-      const chunks = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
+    // Função para desenhar vídeo no canvas frame a frame
+    const draw = () => {
+      const ctx = canvas.getContext("2d");
+      const cw = canvas.width;
+      const ch = canvas.height;
 
-      mediaRecorder.onstop = () => {
-        setRecordedChunks(chunks);
-      };
+      ctx.clearRect(0, 0, cw, ch);
 
-      mediaRecorder.start(100);
-      setRecording(true);
-    } catch (err) {
-      console.error("Erro ao iniciar gravação:", err);
-      alert("Erro ao iniciar gravação: " + err.message);
-    }
-  };
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
 
-  // Parar gravação
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-    }
-  };
+      const scale = Math.max(cw / vw, ch / vh);
+      const w = vw * scale;
+      const h = vh * scale;
+      const x = (cw - w) / 2;
+      const y = (ch - h) / 2;
 
-  // Salvar vídeo
-  const saveVideo = () => {
-    if (recordedChunks.length === 0) {
-      alert("Nenhum vídeo gravado!");
-      return;
-    }
+      ctx.drawImage(video, x, y, w, h);
 
-    const blob = new Blob(recordedChunks, { type: "video/webm" });
-    const url = URL.createObjectURL(blob);
+      animationFrameRef.current = requestAnimationFrame(draw);
+    };
 
-    const a = document.createElement("a");
-    a.style.display = "none";
-    a.href = url;
-    a.download = `shorts_${Date.now()}.webm`;
-    document.body.appendChild(a);
-    a.click();
+    draw();
+  };
 
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
+  // Parar gravação
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+  };
 
-    alert("Vídeo salvo! Verifique a pasta de Downloads. Nota: Se o vídeo estiver na horizontal, gire-o com um editor de vídeo.");
-    setRecordedChunks([]);
-  };
+  // Salvar vídeo
+  const saveVideo = () => {
+    if (!recordedChunks || recordedChunks.length === 0) {
+      alert("Nenhum vídeo gravado!");
+      return;
+    }
+    const blob = new Blob(recordedChunks, { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
 
-  // Fechar modal e liberar câmera
-  const handleClose = () => {
-    if (recording) stopRecording();
-    setIsOpen(false);
-    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-    cameraStreamRef.current = null;
-    setRecordedChunks([]);
-  };
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = url;
+    a.download = `shorts_${Date.now()}.webm`;
+    document.body.appendChild(a);
+    a.click();
 
-  // Cleanup ao desmontar
-  useEffect(() => {
-    return () => {
-      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
 
-  return (
-    <Box p={8} textAlign="center">
-      <Button
-        colorScheme="blue"
-        size="lg"
-        onClick={() => {
-          setIsOpen(true);
-          startCamera();
-        }}
-      >
-        📹 Gravar Shorts
-      </Button>
+    alert("Vídeo salvo! Verifique a pasta de Downloads.");
+    setRecordedChunks([]);
+    setMediaBlobUrl(null);
+  };
 
-      {isOpen && (
-        <Box
-          position="fixed"
-          top="0"
-          left="0"
-          right="0"
-          bottom="0"
-          bg="black"
-          display="flex"
-          flexDirection="column"
-          zIndex="9999"
-          overflow="hidden" // Esconde qualquer excesso
-        >
-          {/* Contêiner para centralizar a visualização 9:16 */}
-          <Flex
-            w="100vw"
-            h="100vh"
-            justify="center"
-            align="center"
-            position="relative"
-          >
-            {/* Vídeo em proporção 9:16 */}
-            <Box
-              as="video"
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              
-              // --- CORREÇÃO DO ZOOM APLICADA AQUI ---
-              // Define a largura máxima de acordo com a proporção 9:16 da tela
-              w="100%" 
-              h="100%"
-              maxW="min(100vh * 9 / 16, 100vw)" // Garante largura correta
-              maxH="min(100vw * 16 / 9, 100vh)" // Garante altura correta
-              objectFit="cover" // Preenche o contêiner 9:16 (sem barras pretas)
-              // ---------------------------------------
-              
-              bg="black"
-            />
-          </Flex>
+  // Fechar modal e liberar câmera
+  const handleClose = () => {
+    if (recording) stopRecording();
+    setIsOpen(false);
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    setRecordedChunks([]);
+    setMediaBlobUrl(null);
+  };
 
-          {/* Header fixo no topo (SOBREPOSTO) */}
-          <Flex 
-            position="absolute"
-            top="0"
-            left="0"
-            right="0"
-            justify="space-between" 
-            align="center" 
-            p={4}
-            zIndex="10"
-            bg="linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)"
-          >
-            <Text fontSize="lg" fontWeight="bold" color="white">
-              {recording ? "🔴 Gravando..." : "Gravar Shorts"}
-            </Text>
-            <Button 
-              size="sm" 
-              variant="ghost" 
-              onClick={handleClose}
-              color="white"
-              _hover={{ bg: "whiteAlpha.300" }}
-            >
-              ✕
-            </Button>
-          </Flex>
+  useEffect(() => {
+    return () => {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cancelAnimationFrame(animationFrameRef.current);
+    };
+  }, []);
 
-          {/* Controles fixos na parte inferior (SOBREPOSTO) */}
-          <Box
-            position="absolute"
-            bottom="0"
-            left="0"
-            right="0"
-            p={6}
-            bg="linear-gradient(to top, rgba(0,0,0,0.8), transparent)"
-            zIndex="10"
-          >
-            <VStack gap={3}>
-              {!recording ? (
-                <Button 
-                  colorScheme="red" 
-                  onClick={startRecording} 
-                  w="full" 
-                  size="lg"
-                  fontSize="xl"
-                  h="60px"
-                  borderRadius="full"
-                >
-                  ⚫ Gravar
-                </Button>
-              ) : (
-                <Button 
-                  colorScheme="red" 
-                  onClick={stopRecording} 
-                  w="full" 
-                  size="lg"
-                  fontSize="xl"
-                  h="60px"
-                  borderRadius="full"
-                  variant="outline"
-                  borderWidth="3px"
-                >
-                  ⏹️ Parar
-                </Button>
-              )}
+  return (
+    <Box p={8} textAlign="center">
+      <Button
+        colorScheme="blue"
+        size="lg"
+        onClick={() => {
+          setIsOpen(true);
+          startCamera();
+        }}
+      >
+        📹 Gravar Shorts
+      </Button>
 
-              {recordedChunks.length > 0 && (
-                <Button 
-                  colorScheme="green" 
-                  onClick={saveVideo} 
-                  w="full" 
-                  size="lg"
-                  fontSize="xl"
-                  h="60px"
-                  borderRadius="full"
-                >
-                  💾 Salvar Vídeo
-                </Button>
-              )}
+      {isOpen && (
+        <Box
+          position="fixed"
+          top="0"
+          left="0"
+          right="0"
+          bottom="0"
+          bg="black"
+          display="flex"
+          flexDirection="column"
+          zIndex="9999"
+          overflow="hidden"
+        >
+          <Flex
+            w="100vw"
+            h="100vh"
+            justify="center"
+            align="center"
+            position="relative"
+          >
+            <Box
+              as="video"
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              w="100%"
+              h="100%"
+              objectFit="cover"
+              bg="black"
+            />
+            <canvas ref={canvasRef} style={{ display: "none" }} />
+          </Flex>
 
-              <Text fontSize="sm" color="whiteAlpha.700">
-                Formato 9:16 • Resolução HD
-              </Text>
-            </VStack>
-          </Box>
-        </Box>
-      )}
-    </Box>
-  );
+          {/* Header */}
+          <Flex 
+            position="absolute"
+            top="0"
+            left="0"
+            right="0"
+            justify="space-between" 
+            align="center" 
+            p={4}
+            zIndex="10"
+            bg="linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)"
+          >
+            <Text fontSize="lg" fontWeight="bold" color="white">
+              {recording ? "🔴 Gravando..." : "Gravar Shorts"}
+            </Text>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={handleClose}
+              color="white"
+              _hover={{ bg: "whiteAlpha.300" }}
+            >
+              ✕
+            </Button>
+          </Flex>
+
+          {/* Controles */}
+          <Box
+            position="absolute"
+            bottom="0"
+            left="0"
+            right="0"
+            p={6}
+            bg="linear-gradient(to top, rgba(0,0,0,0.8), transparent)"
+            zIndex="10"
+          >
+            <VStack gap={3}>
+              {!recording ? (
+                <Button 
+                  colorScheme="red" 
+                  onClick={startRecording} 
+                  w="full" 
+                  size="lg"
+                  fontSize="xl"
+                  h="60px"
+                  borderRadius="full"
+                >
+                  ⚫ Gravar
+                </Button>
+              ) : (
+                <Button 
+                  colorScheme="red" 
+                  onClick={stopRecording} 
+                  w="full" 
+                  size="lg"
+                  fontSize="xl"
+                  h="60px"
+                  borderRadius="full"
+                  variant="outline"
+                  borderWidth="3px"
+                >
+                  ⏹️ Parar
+                </Button>
+              )}
+
+              {mediaBlobUrl && (
+                <>
+                  <video src={mediaBlobUrl} controls style={{ width: "200px" }} />
+                  <Button 
+                    colorScheme="green" 
+                    onClick={saveVideo} 
+                    w="full" 
+                    size="lg"
+                    fontSize="xl"
+                    h="60px"
+                    borderRadius="full"
+                  >
+                    💾 Salvar Vídeo
+                  </Button>
+                </>
+              )}
+
+              <Text fontSize="sm" color="whiteAlpha.700">
+                Formato 9:16 • Resolução HD
+              </Text>
+            </VStack>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
 }
