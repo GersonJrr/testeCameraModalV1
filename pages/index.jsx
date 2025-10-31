@@ -18,14 +18,14 @@ export default function Home() {
 
   // Restrições de alta resolução (Full HD)
   const HIGH_RES_CONSTRAINTS = {
-  video: {
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
-    frameRate: { ideal: 30, max: 30 }
-  },
-  audio: true
-};
-
+    video: {
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      frameRate: { ideal: 60, max: 60 },
+      facingMode: "environment"
+    },
+    audio: false,
+  };
 
   // Restrições de fallback (HD)
   const FALLBACK_RES_CONSTRAINTS = {
@@ -95,7 +95,8 @@ export default function Home() {
     }
 
     // Aumenta o bitrate para 6.0 Mbps (melhor qualidade para HD/Full HD)
-    const videoBitsPerSecond = 6000000;
+    const videoBitsPerSecond = 8000000; // 8 Mbps
+
 
     try {
       const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond });
@@ -217,6 +218,7 @@ export default function Home() {
                   bg="black"
                   borderRadius="md"
                 />
+
 
                 {!recording ? (
                   <Button colorScheme="green" onClick={startRecording} w="full" size="lg">
