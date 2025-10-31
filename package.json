@@ -16,6 +16,7 @@
     "@wmik/use-media-recorder": "^1.6.5-beta.0",
     "framer-motion": "^4.1.17",
     "install": "^0.13.0",
+    "lucide-react": "^0.552.0",
     "next": "^12.3.4",
     "npm": "^11.6.2",
     "react": "^17.0.2",
