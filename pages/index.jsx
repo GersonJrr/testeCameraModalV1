@@ -16,15 +16,20 @@ export default function Home() {
   const [recordedChunks, setRecordedChunks] = useState([]);
   const [cameraStream, setCameraStream] = useState(null);
   const [canvasStream, setCanvasStream] = useState(null);
+  const animationFrameRef = useRef(null);
 
   const WIDTH = 386;
   const HEIGHT = 583;
 
-  // Inicia câmera
+  // Inicia câmera traseira
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: WIDTH }, height: { ideal: HEIGHT } },
+        video: { 
+          width: { ideal: WIDTH }, 
+          height: { ideal: HEIGHT },
+          facingMode: { exact: "environment" } // Força câmera traseira
+        },
         audio: true,
       });
 
@@ -39,17 +44,48 @@ export default function Home() {
       canvas.width = WIDTH;
       canvas.height = HEIGHT;
 
-      // Renderiza os frames da câmera no canvas
+      // Renderiza os frames da câmera no canvas SEMPRE (não só quando recording)
       const drawFrame = () => {
-        if (recording && videoRef.current) {
+        if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
           ctx.drawImage(videoRef.current, 0, 0, WIDTH, HEIGHT);
         }
-        requestAnimationFrame(drawFrame);
+        animationFrameRef.current = requestAnimationFrame(drawFrame);
       };
       drawFrame();
     } catch (err) {
       console.error("Erro ao acessar a câmera:", err);
-      alert("Não foi possível acessar a câmera. Verifique as permissões.");
+      // Tenta câmera frontal como fallback
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            width: { ideal: WIDTH }, 
+            height: { ideal: HEIGHT },
+            facingMode: "user"
+          },
+          audio: true,
+        });
+        
+        setCameraStream(stream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext("2d");
+        canvas.width = WIDTH;
+        canvas.height = HEIGHT;
+
+        const drawFrame = () => {
+          if (videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
+            ctx.drawImage(videoRef.current, 0, 0, WIDTH, HEIGHT);
+          }
+          animationFrameRef.current = requestAnimationFrame(drawFrame);
+        };
+        drawFrame();
+      } catch (fallbackErr) {
+        console.error("Erro ao acessar câmera frontal:", fallbackErr);
+        alert("Não foi possível acessar a câmera. Verifique as permissões.");
+      }
     }
   };
 
@@ -57,6 +93,13 @@ export default function Home() {
     if (!canvasRef.current) return;
 
     const stream = canvasRef.current.captureStream(30); // 30 FPS
+    
+    // Adiciona o áudio da câmera ao stream do canvas
+    if (cameraStream) {
+      const audioTracks = cameraStream.getAudioTracks();
+      audioTracks.forEach(track => stream.addTrack(track));
+    }
+    
     setCanvasStream(stream);
 
     const mediaRecorder = new MediaRecorder(stream, {
@@ -100,13 +143,21 @@ export default function Home() {
 
   const handleClose = () => {
     setIsOpen(false);
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
     cameraStream?.getTracks().forEach((t) => t.stop());
+    canvasStream?.getTracks().forEach((t) => t.stop());
     setRecording(false);
+    setRecordedChunks([]);
   };
 
-  // Libera câmera ao fechar
+  // Libera recursos ao fechar
   useEffect(() => {
     return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
       cameraStream?.getTracks().forEach((t) => t.stop());
       canvasStream?.getTracks().forEach((t) => t.stop());
     };
@@ -164,6 +215,7 @@ export default function Home() {
                   h="444px"
                   bg="black"
                   borderRadius="md"
+                  style={{ objectFit: 'cover' }}
                 />
 
                 {/* Canvas invisível usado para gravação */}
@@ -186,7 +238,7 @@ export default function Home() {
                 )}
 
                 <Text fontSize="xs" color="gray.500">
-                  Resolução forçada: {WIDTH}×{HEIGHT}px
+                  Resolução: {WIDTH}×{HEIGHT}px | Câmera traseira
                 </Text>
               </VStack>
             </Box>
