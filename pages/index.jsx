@@ -1,208 +1,303 @@
+import React, { useRef, useState, useCallback } from 'react';
 import {
   Box,
   Button,
   VStack,
+  HStack,
   Text,
+  Alert,
+  AlertIcon,
   useToast,
-  AspectRatio,
+  Container,
   Heading,
-  Center
-} from "@chakra-ui/react";
-import React, { useRef, useState, useCallback } from "react";
+  Flex
+} from '@chakra-ui/react';
 
-// Componente para a gravação de vídeo
 export default function Home() {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
+  
   const [isRecording, setIsRecording] = useState(false);
-  const [videoBlob, setVideoBlob] = useState(null);
-  const [permissionGranted, setPermissionGranted] = useState(false);
-  const toast = useToast();
-  const recordedChunks = useRef([]);
+  const [recordedChunks, setRecordedChunks] = useState([]);
+  const [hasPermission, setHasPermission] = useState(null);
+  const [isCameraReady, setIsCameraReady] = useState(false);
 
-  // Tenta obter acesso à câmera traseira (environment) com resolução 1080x1920
-  const getCameraAccess = useCallback(async () => {
+  const toast = useToast();
+
+  // Inicializar a câmera traseira
+  const initializeCamera = useCallback(async () => {
     try {
       const constraints = {
-        audio: true,
         video: {
-          width: { exact: 1080 }, // Tenta largura exata (pode ser ignorada pelo browser)
-          height: { exact: 1920 }, // Tenta altura exata (pode ser ignorada pelo browser)
-          facingMode: { exact: "environment" } // Tenta a câmera traseira
-        }
+          width: { ideal: 1080 },
+          height: { ideal: 1920 },
+          aspectRatio: 9 / 16,
+          facingMode: 'environment' // Câmera traseira
+        },
+        audio: true
       };
-      
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      videoRef.current.srcObject = stream;
-      setPermissionGranted(true);
-      return stream;
-    } catch (err) {
-      console.error("Erro ao acessar a câmera:", err);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        streamRef.current = stream;
+        setHasPermission(true);
+        setIsCameraReady(true);
+        
+        toast({
+          title: "Câmera inicializada",
+          description: "Câmera traseira pronta para gravar",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao acessar a câmera:', error);
+      setHasPermission(false);
+      
       toast({
-        title: "Erro de Acesso à Câmera.",
-        description: "Certifique-se de que a câmera está conectada e as permissões foram concedidas.",
+        title: "Erro na câmera",
+        description: "Não foi possível acessar a câmera traseira",
         status: "error",
         duration: 5000,
         isClosable: true,
       });
-      setPermissionGranted(false);
-      return null;
     }
   }, [toast]);
 
-  // Inicia a gravação
-  const startRecording = async () => {
-    const stream = await getCameraAccess();
-    if (!stream) return;
+  // Iniciar gravação
+  const startRecording = useCallback(() => {
+    if (!streamRef.current) return;
 
-    recordedChunks.current = [];
-    
-    // Tenta gravar em 'video/webm' que é amplamente suportado
-    mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'video/webm' });
-    
-    mediaRecorderRef.current.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        recordedChunks.current.push(event.data);
-      }
-    };
+    try {
+      const mediaRecorder = new MediaRecorder(streamRef.current, {
+        mimeType: 'video/webm;codecs=vp9,opus'
+      });
 
-    mediaRecorderRef.current.onstop = () => {
-      // Cria o Blob do vídeo a partir dos chunks gravados
-      const blob = new Blob(recordedChunks.current, { type: 'video/webm' });
-      setVideoBlob(blob);
-      // Para o stream da câmera para liberar recursos
-      stream.getTracks().forEach(track => track.stop());
-    };
+      mediaRecorderRef.current = mediaRecorder;
+      setRecordedChunks([]);
 
-    mediaRecorderRef.current.start();
-    setIsRecording(true);
-    setVideoBlob(null); // Limpa o vídeo anterior
-    toast({
-        title: "Gravação Iniciada!",
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          setRecordedChunks(prev => [...prev, event.data]);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+
+      toast({
+        title: "Gravação iniciada",
         status: "info",
         duration: 2000,
         isClosable: true,
       });
-  };
+    } catch (error) {
+      console.error('Erro ao iniciar gravação:', error);
+      toast({
+        title: "Erro na gravação",
+        description: "Não foi possível iniciar a gravação",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  }, [toast]);
 
-  // Para a gravação
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+  // Parar gravação
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+
       toast({
-        title: "Gravação Parada. Vídeo Pronto para Salvar.",
+        title: "Gravação finalizada",
+        description: "Vídeo pronto para salvar",
         status: "success",
         duration: 3000,
         isClosable: true,
       });
     }
-  };
+  }, [isRecording, toast]);
 
-  // Salva o vídeo (inicia um download no navegador)
-  const saveVideo = () => {
-    if (videoBlob) {
-      // Cria um link temporário para iniciar o download
-      const url = URL.createObjectURL(videoBlob);
-      const a = document.createElement('a');
-      document.body.appendChild(a);
-      a.style = 'display: none';
-      a.href = url;
-      a.download = `video-gravado-${Date.now()}.webm`; // Nome do arquivo
-      a.click();
-      window.URL.revokeObjectURL(url); // Limpa o objeto URL
-      a.remove();
-      
+  // Salvar vídeo na galeria
+  const saveVideo = useCallback(() => {
+    if (recordedChunks.length === 0) {
       toast({
-        title: "Download Iniciado!",
-        description: "Verifique sua pasta de Downloads.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-      });
-    } else {
-      toast({
-        title: "Nenhum Vídeo para Salvar.",
-        description: "Grave um vídeo primeiro.",
+        title: "Nenhum vídeo",
+        description: "Grave um vídeo primeiro",
         status: "warning",
         duration: 3000,
         isClosable: true,
       });
+      return;
     }
-  };
+
+    try {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      
+      // Criar link de download
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `video-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+      
+      document.body.appendChild(a);
+      a.click();
+      
+      // Limpar
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+
+      toast({
+        title: "Vídeo salvo",
+        description: "Vídeo salvo na galeria com sucesso",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+
+      // Limpar chunks após salvar
+      setRecordedChunks([]);
+    } catch (error) {
+      console.error('Erro ao salvar vídeo:', error);
+      toast({
+        title: "Erro ao salvar",
+        description: "Não foi possível salvar o vídeo",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  }, [recordedChunks, toast]);
+
+  // Parar a câmera quando o componente desmontar
+  React.useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   return (
-    <Center minH="100vh" bg="gray.50">
-      <VStack spacing={4} p={8} bg="white" boxShadow="xl" borderRadius="lg" w="full" maxW="400px">
-        <Heading size="md" color="teal.500">Gravador de Vídeo (Câmera Traseira)</Heading>
+    <Container maxW="container.md" py={8}>
+      <VStack spacing={6} align="stretch">
+        <Heading textAlign="center" color="blue.600">
+          Gravador de Vídeo
+        </Heading>
 
-        {/* AspectRatio para tentar simular 1080x1920 (ou 9:16) */}
-        <AspectRatio ratio={9 / 16} w="full" maxH="70vh" bg="black" borderRadius="md" overflow="hidden">
-          {videoBlob ? (
-            // Exibe o vídeo gravado
-            <video
-              src={URL.createObjectURL(videoBlob)}
-              controls
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          ) : (
-            // Pré-visualização da câmera
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          )}
-        </AspectRatio>
-        
-        <Box>
-            <Text fontSize="sm" color="gray.500">
-                {videoBlob ? "Vídeo Pronto" : isRecording ? "GRAVANDO..." : (permissionGranted ? "Câmera Ativa" : "Clique em 'Iniciar'")}
-            </Text>
-        </Box>
+        {hasPermission === false && (
+          <Alert status="error">
+            <AlertIcon />
+            Permissão da câmera negada. Por favor, permita o acesso à câmera.
+          </Alert>
+        )}
 
-        <Box>
-            {!isRecording && !videoBlob && (
-                <Button
-                    onClick={startRecording}
-                    colorScheme="red"
-              
-                    size="lg"
-                    w="150px"
-                    isDisabled={!navigator.mediaDevices}
-                >
-                    Iniciar
-                </Button>
-            )}
-
-            {isRecording && (
-                <Button
-                    onClick={stopRecording}
-                    colorScheme="red"
-                   
-                    size="lg"
-                    w="150px"
-                >
-                    Parar
-                </Button>
-            )}
-        </Box>
-
-        <Button
-            onClick={saveVideo}
-            colorScheme="green"
-            
-            w="200px"
-            isDisabled={!videoBlob}
+        {/* Área do vídeo */}
+        <Box
+          position="relative"
+          width="100%"
+          maxW="540px"
+          height="960px"
+          mx="auto"
+          borderRadius="lg"
+          overflow="hidden"
+          boxShadow="xl"
+          bg="gray.900"
         >
-            Salvar Vídeo (Download)
-        </Button>
-        <Text fontSize="xs" color="gray.400" textAlign="center">
-            *A resolução e o uso da câmera traseira dependem do suporte do navegador e do dispositivo. O salvamento é um download.
-        </Text>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transform: 'scaleX(-1)' // Espelhar para parecer natural
+            }}
+          />
+          
+          {!isCameraReady && (
+            <Flex
+              position="absolute"
+              top="0"
+              left="0"
+              width="100%"
+              height="100%"
+              bg="gray.800"
+              alignItems="center"
+              justifyContent="center"
+              color="white"
+            >
+              <Text>Câmera não inicializada</Text>
+            </Flex>
+          )}
+        </Box>
+
+        {/* Controles */}
+        <VStack spacing={4}>
+          {!isCameraReady ? (
+            <Button
+              colorScheme="blue"
+              size="lg"
+              onClick={initializeCamera}
+              width="200px"
+            >
+              Iniciar Câmera
+            </Button>
+          ) : (
+            <HStack spacing={4}>
+              {!isRecording ? (
+                <Button
+                  colorScheme="red"
+                  size="lg"
+                  onClick={startRecording}
+                  leftIcon={<Box w={3} h={3} bg="white" borderRadius="full" />}
+                >
+                  Gravar
+                </Button>
+              ) : (
+                <Button
+                  colorScheme="orange"
+                  size="lg"
+                  onClick={stopRecording}
+                >
+                  Parar
+                </Button>
+              )}
+
+              {recordedChunks.length > 0 && (
+                <Button
+                  colorScheme="green"
+                  size="lg"
+                  onClick={saveVideo}
+                  leftIcon={<Box>💾</Box>}
+                >
+                  Salvar Vídeo
+                </Button>
+              )}
+            </HStack>
+          )}
+
+          {/* Informações */}
+          <Text fontSize="sm" color="gray.600" textAlign="center">
+            Resolução: 1080x1920 • Câmera Traseira
+            {isRecording && (
+              <Box as="span" color="red.500" ml={2}>
+                ● GRAVANDO
+              </Box>
+            )}
+          </Text>
+        </VStack>
       </VStack>
-    </Center>
+    </Container>
   );
-}
+};
