@@ -207,17 +207,32 @@ export default function Home() {
           >
             <Box p={4} flexGrow={1} overflowY="auto">
               <VStack gap={4}>
-                <Box
-                  as="video"
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  w="100%"
-                  maxH="75vh"
-                  bg="black"
-                  borderRadius="md"
-                />
+                <Box position="relative" w="100%" maxH="75vh" borderRadius="md" overflow="hidden">
+                  <Box
+                    as="video"
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    w="100%"
+                    maxH="75vh"
+                    bg="black"
+                    borderRadius="md"
+                  />
+
+                  {/* Marca pontilhada */}
+                  <Box
+                    position="absolute"
+                    top="50%"
+                    left="50%"
+                    width="386px"
+                    height="583px"
+                    transform="translate(-50%, -50%)"
+                    border="2px dashed red" // cor da marcação
+                    pointerEvents="none" // não interfere nos clicks do vídeo
+                  />
+                </Box>
+
 
 
                 {!recording ? (
