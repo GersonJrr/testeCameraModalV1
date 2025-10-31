@@ -1,98 +1,72 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, Button, VStack, Text, Progress, IconButton, Flex } from '@chakra-ui/react';
-import { Camera, Square, Download, RotateCw, X } from 'lucide-react';
+import { Box, Button, VStack, Text, Progress, IconButton, Flex, Spinner } from '@chakra-ui/react';
+import { Camera, Square, RotateCw } from 'lucide-react';
+
 
 export default function InstagramVideoRecorder() {
   const [isRecording, setIsRecording] = useState(false);
-  const [recordedVideo, setRecordedVideo] = useState(null);
-  const [countdown, setCountdown] = useState(0);
-  const [facingMode, setFacingMode] = useState('user'); // 'user' para frontal, 'environment' para traseira
+  const [uploading, setUploading] = useState(false);
+  const [facingMode, setFacingMode] = useState('user');
   const [stream, setStream] = useState(null);
-  
+  const [countdown, setCountdown] = useState(0);
+
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
 
-  // Inicializa a câmera
   useEffect(() => {
     startCamera();
-    return () => {
-      stopCamera();
-    };
+    return stopCamera;
   }, [facingMode]);
 
   const startCamera = async () => {
     try {
-      // Limpa stream anterior
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-
+      if (stream) stream.getTracks().forEach(track => track.stop());
       const constraints = {
         video: {
-          facingMode: facingMode,
+          facingMode,
           width: { ideal: 1080 },
           height: { ideal: 1920 },
-          aspectRatio: { ideal: 9/16 } // Formato vertical do Instagram
+          aspectRatio: { ideal: 9 / 16 },
         },
-        audio: true
+        audio: true,
       };
-
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(mediaStream);
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
+      if (videoRef.current) videoRef.current.srcObject = mediaStream;
     } catch (err) {
-      console.error('Erro ao acessar câmera:', err);
-      alert('Não foi possível acessar a câmera. Verifique as permissões.');
+      alert('Erro ao acessar câmera: ' + err.message);
     }
   };
 
   const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
+    if (stream) stream.getTracks().forEach(track => track.stop());
   };
 
   const startRecording = () => {
     if (!stream) return;
 
     chunksRef.current = [];
-    
-    // Configura o MediaRecorder
     const options = { mimeType: 'video/webm;codecs=vp9' };
-    
-    // Fallback para outros formatos se VP9 não estiver disponível
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options.mimeType = 'video/webm;codecs=vp8';
-      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        options.mimeType = 'video/webm';
-      }
-    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) options.mimeType = 'video/webm';
 
     mediaRecorderRef.current = new MediaRecorder(stream, options);
 
     mediaRecorderRef.current.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        chunksRef.current.push(event.data);
-      }
+      if (event.data.size > 0) chunksRef.current.push(event.data);
     };
 
-    mediaRecorderRef.current.onstop = () => {
+    mediaRecorderRef.current.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-      const videoUrl = URL.createObjectURL(blob);
-      setRecordedVideo(videoUrl);
       stopCamera();
+      await uploadVideo(blob); // envia o vídeo automaticamente
     };
 
     mediaRecorderRef.current.start();
     setIsRecording(true);
     setCountdown(0);
 
-    // Timer de 12 segundos
     timerRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev >= 12) {
@@ -108,172 +82,66 @@ export default function InstagramVideoRecorder() {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      clearInterval(timerRef.current);
     }
   };
 
-  const toggleCamera = () => {
-    setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
-  };
+  
 
-  const downloadVideo = () => {
-    if (recordedVideo) {
-      const a = document.createElement('a');
-      a.href = recordedVideo;
-      a.download = `video-${Date.now()}.webm`;
-      a.click();
-    }
-  };
-
-  const resetRecording = () => {
-    if (recordedVideo) {
-      URL.revokeObjectURL(recordedVideo);
-    }
-    setRecordedVideo(null);
-    setCountdown(0);
-    startCamera();
-  };
+  const toggleCamera = () => setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
 
   const progress = (countdown / 12) * 100;
 
   return (
-    <Box
-      position="relative"
-      width="100vw"
-      height="100vh"
-      bg="black"
-      overflow="hidden"
-    >
-      {/* Vídeo Preview ou Gravado */}
-      <Box
-        position="absolute"
-        top="0"
-        left="0"
-        width="100%"
-        height="100%"
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-      >
-        {!recordedVideo ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          />
-        ) : (
-          <video
-            src={recordedVideo}
-            controls
-            playsInline
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          />
-        )}
-      </Box>
+    <Box position="relative" width="100vw" height="100vh" bg="black" overflow="hidden">
+      {/* Vídeo */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={!uploading}
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      />
 
-      {/* Overlay de Controles */}
-      <VStack
-        position="absolute"
-        top="0"
-        left="0"
-        width="100%"
-        height="100%"
-        justifyContent="space-between"
-        padding="20px"
-        pointerEvents="none"
-      >
+      {/* Overlay */}
+      <VStack position="absolute" top="0" left="0" w="100%" h="100%" justify="space-between" p="20px">
         {/* Header */}
-        <Flex width="100%" justifyContent="space-between" alignItems="center">
-          {!recordedVideo && (
-            <IconButton
-              icon={<RotateCw size={24} />}
-              aria-label="Trocar câmera"
-              onClick={toggleCamera}
-              colorScheme="whiteAlpha"
-              variant="ghost"
-              color="white"
-              pointerEvents="auto"
-              isDisabled={isRecording}
-            />
-          )}
-          <Box flex="1" />
-          {recordedVideo && (
-            <IconButton
-              icon={<X size={24} />}
-              aria-label="Fechar"
-              onClick={resetRecording}
-              colorScheme="whiteAlpha"
-              variant="ghost"
-              color="white"
-              pointerEvents="auto"
-            />
-          )}
+        <Flex w="100%" justify="space-between">
+          <IconButton
+            icon={<RotateCw size={24} />}
+            onClick={toggleCamera}
+            aria-label="Trocar câmera"
+            isDisabled={isRecording}
+            colorScheme="whiteAlpha"
+          />
         </Flex>
 
-        {/* Progress Bar */}
+        {/* Progress */}
         {isRecording && (
-          <Box width="100%" px="20px" pointerEvents="none">
-            <Progress
-              value={progress}
-              size="sm"
-              colorScheme="red"
-              bg="whiteAlpha.300"
-              borderRadius="full"
-            />
-            <Text color="white" fontSize="sm" textAlign="center" mt="2">
+          <Box w="100%">
+            <Progress value={progress} size="sm" colorScheme="red" borderRadius="full" />
+            <Text color="white" fontSize="sm" textAlign="center">
               {countdown.toFixed(1)}s / 12s
             </Text>
           </Box>
         )}
 
-        {/* Footer - Botões de Controle */}
-        <Flex
-          width="100%"
-          justifyContent="center"
-          alignItems="center"
-          gap="40px"
-          pb="40px"
-        >
-          {!recordedVideo ? (
+        {/* Footer */}
+        <Flex justify="center" align="center" pb="40px">
+          {uploading ? (
+            <Spinner size="xl" color="white" />
+          ) : (
             <Button
               onClick={isRecording ? stopRecording : startRecording}
               size="lg"
-              width="70px"
-              height="70px"
+              w="70px"
+              h="70px"
               borderRadius="full"
-              bg={isRecording ? "red.500" : "white"}
-              color={isRecording ? "white" : "black"}
+              bg={isRecording ? 'red.500' : 'white'}
+              color={isRecording ? 'white' : 'black'}
               border="4px solid white"
-              _hover={{ transform: "scale(1.1)" }}
-              _active={{ transform: "scale(0.95)" }}
-              transition="all 0.2s"
-              pointerEvents="auto"
-              leftIcon={isRecording ? <Square size={24} /> : <Camera size={24} />}
             >
-              {isRecording ? '' : ''}
-            </Button>
-          ) : (
-            <Button
-              onClick={downloadVideo}
-              size="lg"
-              colorScheme="green"
-              leftIcon={<Download size={20} />}
-              pointerEvents="auto"
-            >
-              Baixar Vídeo
+              {isRecording ? <Square size={24} /> : <Camera size={24} />}
             </Button>
           )}
         </Flex>
