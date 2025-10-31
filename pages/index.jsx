@@ -174,39 +174,68 @@ export default function Home() {
             overflow="hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <Flex justify="space-between" align="center" p={4} borderBottom="1px" borderColor="gray.200">
-              <Text fontSize="lg" fontWeight="bold">
-                {recording ? "🔴 Gravando..." : "Gravar Vídeo"}
-              </Text>
-              <Button size="sm" variant="ghost" onClick={handleClose}>✕</Button>
-            </Flex>
-            
-            <Box p={4} h="calc(100vh - 64px)" display="flex" flexDirection="column">
-              <VStack gap={4} flex="1" justify="space-between">
-                <Box
-                  as="video"
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  w="100%"
-                  h="100%"
-                  bg="black"
-                  sx={{ objectFit: 'cover' }}
-                />
+            <Box 
+              position="relative" 
+              h="100vh" 
+              display="flex" 
+              flexDirection="column"
+              bg="black"
+            >
+              <Box
+                as="video"
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                position="absolute"
+                top="0"
+                left="0"
+                w="100%"
+                h="100%"
+                bg="black"
+                sx={{ objectFit: 'cover' }}
+              />
+              
+              <Flex 
+                position="absolute" 
+                top="0" 
+                left="0" 
+                right="0" 
+                justify="space-between" 
+                align="center" 
+                p={4} 
+                bg="blackAlpha.600"
+                zIndex="10"
+              >
+                <Text fontSize="lg" fontWeight="bold" color="white">
+                  {recording ? "🔴 Gravando..." : "Gravar Vídeo"}
+                </Text>
+                <Button size="sm" variant="ghost" onClick={handleClose} color="white">✕</Button>
+              </Flex>
+
+              <VStack 
+                position="absolute" 
+                bottom="0" 
+                left="0" 
+                right="0" 
+                gap={3} 
+                p={4} 
+                bg="blackAlpha.600"
+                zIndex="10"
+              >
 
                 {!recording ? (
-                  <Button colorScheme="green" onClick={startRecording} w="full" size="lg" flexShrink={0}>
+                  <Button colorScheme="green" onClick={startRecording} w="full" size="lg">
                     ▶️ Iniciar Gravação
                   </Button>
                 ) : (
-                  <Button colorScheme="red" onClick={stopRecording} w="full" size="lg" flexShrink={0}>
+                  <Button colorScheme="red" onClick={stopRecording} w="full" size="lg">
                     ⏹️ Parar Gravação
                   </Button>
                 )}
 
                 {recordedChunks.length > 0 && (
-                  <Button colorScheme="blue" onClick={saveVideo} w="full" size="lg" flexShrink={0}>
+                  <Button colorScheme="blue" onClick={saveVideo} w="full" size="lg">
                     💾 Salvar Vídeo
                   </Button>
                 )}
