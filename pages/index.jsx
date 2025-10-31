@@ -21,10 +21,13 @@ export default function Home() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "environment" // câmera traseira
+          facingMode: "environment",
+          width: { ideal: 386 },   // largura desejada
+          height: { ideal: 583 }   // altura desejada
         },
-        audio: true,
+        audio: false
       });
+
 
       cameraStreamRef.current = stream;
 
@@ -195,7 +198,7 @@ export default function Home() {
                   playsInline
                   muted
                   maxW="100%"
-                  maxH="80vh"
+                  maxH="100%"
                   bg="black"
                   borderRadius="md"
                 />
